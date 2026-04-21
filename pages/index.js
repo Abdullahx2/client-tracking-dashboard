@@ -1,217 +1,208 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@supabase/supabase-js'
 
-// Supabase connection
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 const supabase = createClient(supabaseUrl, supabaseKey)
 
 export default function Home() {
-  const [halls, setHalls] = useState([])
-  const [categories, setCategories] = useState([])
-  const [platforms, setPlatforms] = useState([])
-  const [agents, setAgents] = useState([])
-  
-  // Form state
-  const [selectedHall, setSelectedHall] = useState('')
-  const [selectedCategory, setSelectedCategory] = useState('')
-  const [selectedPlatform, setSelectedPlatform] = useState('')
-  const [selectedAgent, setSelectedAgent] = useState('')
+  const [dateType, setDateType] = useState('live')
+  const [customDate, setCustomDate] = useState('')
+  const [customTime, setCustomTime] = useState('')
   const [clientName, setClientName] = useState('')
-  const [pageName, setPageName] = useState('')
-  const [inactivityReason, setInactivityReason] = useState('')
+  const [platforms, setPlatforms] = useState([])
+  const [selectedPlatform, setSelectedPlatform] = useState('')
+  const [agents, setAgents] = useState([])
+  const [selectedAgent, setSelectedAgent] = useState('')
+  const [category, setCategory] = useState('')
+  const [notes, setNotes] = useState('')
   const [depositMade, setDepositMade] = useState(false)
-  const [date, setDate] = useState('')
-  const [time, setTime] = useState('')
-  
   const [records, setRecords] = useState([])
   const [loading, setLoading] = useState(false)
 
-  // Load data
+  const liveDate = new Date().toISOString().split('T')[0]
+  const liveTime = new Date().toTimeString().slice(0, 5)
+
   useEffect(() => {
-    loadHalls()
+    loadPlatforms()
     loadRecords()
-    setDate(new Date().toISOString().split('T')[0])
-    setTime(new Date().toTimeString().slice(0,5))
   }, [])
 
-  async function loadHalls() {
-    const { data } = await supabase.from('halls').select('*')
-    if (data) setHalls(data)
-  }
-
-  async function loadCategories(hallId) {
-    if (!hallId) return
-    const { data } = await supabase.from('categories').select('*').eq('hall_id', hallId)
-    if (data) setCategories(data)
-  }
-
-  async function loadPlatforms(categoryId) {
-    if (!categoryId) return
-    const { data } = await supabase.from('platforms').select('*').eq('category_id', categoryId)
+  async function loadPlatforms() {
+    const { data } = await supabase.from('platforms').select('*')
     if (data) setPlatforms(data)
   }
 
-  async function loadAgents(platformId) {
-    if (!platformId) return
-    const { data } = await supabase.from('agents').select('*').eq('platform_id', platformId)
-    if (data) setAgents(data)
+  async function loadAgents(platformName) {
+    if (!platformName) return
+    const { data: platformData } = await supabase.from('platforms').select('id').eq('name', platformName).single()
+    if (platformData) {
+      const { data } = await supabase.from('agents').select('*').eq('platform_id', platformData.id)
+      if (data) setAgents(data)
+    }
   }
 
   async function loadRecords() {
-    const { data } = await supabase.from('client_records').select('*, agents(name)').order('date', { ascending: false })
+    const { data } = await supabase.from('client_records').select('*, agents(name)').order('created_at', { ascending: false })
     if (data) setRecords(data)
   }
 
   async function handleSubmit(e) {
     e.preventDefault()
     setLoading(true)
-    
+
+    const finalDate = dateType === 'live' ? liveDate : customDate
+    const finalTime = dateType === 'live' ? liveTime : customTime
+
     const { error } = await supabase.from('client_records').insert({
       agent_id: parseInt(selectedAgent),
-      date: date,
-      time: time,
+      date: finalDate,
+      time: finalTime,
       client_name: clientName,
-      page_name: pageName,
-      inactivity_reason: inactivityReason,
+      page_name: selectedPlatform,
+      category: category,
+      notes: notes,
       deposit_made: depositMade
     })
-    
+
     if (!error) {
       alert('Client record saved!')
       loadRecords()
-      // Reset form
       setClientName('')
-      setPageName('')
-      setInactivityReason('')
-      setDepositMade(false)
-      setSelectedHall('')
-      setSelectedCategory('')
       setSelectedPlatform('')
       setSelectedAgent('')
+      setCategory('')
+      setNotes('')
+      setDepositMade(false)
+      setCustomDate('')
+      setCustomTime('')
+      setDateType('live')
     } else {
       alert('Error: ' + error.message)
     }
     setLoading(false)
   }
 
+  async function updateDeposit(recordId, currentStatus) {
+    const { error } = await supabase
+      .from('client_records')
+      .update({ deposit_made: !currentStatus })
+      .eq('id', recordId)
+
+    if (!error) {
+      loadRecords()
+      alert('Deposit status updated!')
+    } else {
+      alert('Error: ' + error.message)
+    }
+  }
+
   return (
-    <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '20px' }}>
+    <div style={{ maxWidth: '800px', margin: '0 auto', padding: '20px' }}>
       <h1>📋 Client Tracking System</h1>
-      
-      {/* Form */}
+
       <form onSubmit={handleSubmit} style={{ background: '#f5f5f5', padding: '20px', borderRadius: '10px', marginBottom: '30px' }}>
-        <h2>Add New Client Entry</h2>
-        
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+        <h2>➕ Add New Client Entry</h2>
+
+        <div style={{ marginBottom: '15px' }}>
+          <label>Date & Time</label>
           <div>
-            <label>Hall *</label>
-            <select required value={selectedHall} onChange={(e) => {
-              setSelectedHall(e.target.value)
-              loadCategories(e.target.value)
-              setSelectedCategory('')
-              setSelectedPlatform('')
-              setSelectedAgent('')
-            }} style={{ width: '100%', padding: '8px' }}>
-              <option value="">Select Hall</option>
-              {halls.map(h => <option key={h.id} value={h.id}>{h.name}</option>)}
-            </select>
+            <label style={{ marginRight: '20px' }}>
+              <input type="radio" value="live" checked={dateType === 'live'} onChange={() => setDateType('live')} /> Live (Now)
+            </label>
+            <label>
+              <input type="radio" value="custom" checked={dateType === 'custom'} onChange={() => setDateType('custom')} /> Custom
+            </label>
           </div>
-          
-          <div>
-            <label>Category *</label>
-            <select required value={selectedCategory} onChange={(e) => {
-              setSelectedCategory(e.target.value)
-              loadPlatforms(e.target.value)
-              setSelectedPlatform('')
-              setSelectedAgent('')
-            }} style={{ width: '100%', padding: '8px' }}>
-              <option value="">Select Category</option>
-              {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
-          </div>
-          
-          <div>
-            <label>Platform *</label>
-            <select required value={selectedPlatform} onChange={(e) => {
-              setSelectedPlatform(e.target.value)
-              loadAgents(e.target.value)
-              setSelectedAgent('')
-            }} style={{ width: '100%', padding: '8px' }}>
-              <option value="">Select Platform</option>
-              {platforms.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
-          </div>
-          
-          <div>
-            <label>Agent *</label>
-            <select required value={selectedAgent} onChange={(e) => setSelectedAgent(e.target.value)} style={{ width: '100%', padding: '8px' }}>
-              <option value="">Select Agent</option>
-              {agents.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-            </select>
-          </div>
-          
-          <div>
-            <label>Date *</label>
-            <input type="date" required value={date} onChange={(e) => setDate(e.target.value)} style={{ width: '100%', padding: '8px' }} />
-          </div>
-          
-          <div>
-            <label>Time *</label>
-            <input type="time" required value={time} onChange={(e) => setTime(e.target.value)} style={{ width: '100%', padding: '8px' }} />
-          </div>
-          
-          <div>
-            <label>Client Name *</label>
-            <input type="text" required value={clientName} onChange={(e) => setClientName(e.target.value)} style={{ width: '100%', padding: '8px' }} />
-          </div>
-          
-          <div>
-            <label>Page Name</label>
-            <input type="text" value={pageName} onChange={(e) => setPageName(e.target.value)} style={{ width: '100%', padding: '8px' }} />
-          </div>
-          
-          <div style={{ gridColumn: 'span 2' }}>
-            <label>Inactivity Reason</label>
-            <textarea rows="3" value={inactivityReason} onChange={(e) => setInactivityReason(e.target.value)} style={{ width: '100%', padding: '8px' }} />
-          </div>
-          
-          <div>
-            <label>Deposit Made?</label>
-            <input type="checkbox" checked={depositMade} onChange={(e) => setDepositMade(e.target.checked)} /> Yes
-          </div>
+          {dateType === 'custom' && (
+            <div style={{ marginTop: '10px', display: 'flex', gap: '10px' }}>
+              <input type="date" value={customDate} onChange={(e) => setCustomDate(e.target.value)} style={{ padding: '8px' }} />
+              <input type="time" value={customTime} onChange={(e) => setCustomTime(e.target.value)} style={{ padding: '8px' }} />
+            </div>
+          )}
+          {dateType === 'live' && (
+            <div style={{ marginTop: '10px', color: '#555' }}>
+              📅 {liveDate} | 🕐 {liveTime}
+            </div>
+          )}
         </div>
-        
-        <button type="submit" disabled={loading} style={{ marginTop: '20px', padding: '10px 20px', background: 'blue', color: 'white', border: 'none', borderRadius: '5px' }}>
+
+        <div style={{ marginBottom: '15px' }}>
+          <label>Client Name *</label>
+          <input type="text" required value={clientName} onChange={(e) => setClientName(e.target.value)} style={{ width: '100%', padding: '8px' }} />
+        </div>
+
+        <div style={{ marginBottom: '15px' }}>
+          <label>Platform (Page) *</label>
+          <select required value={selectedPlatform} onChange={(e) => {
+            setSelectedPlatform(e.target.value)
+            loadAgents(e.target.value)
+            setSelectedAgent('')
+          }} style={{ width: '100%', padding: '8px' }}>
+            <option value="">Select Platform</option>
+            {platforms.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+          </select>
+        </div>
+
+        <div style={{ marginBottom: '15px' }}>
+          <label>Agent *</label>
+          <select required value={selectedAgent} onChange={(e) => setSelectedAgent(e.target.value)} style={{ width: '100%', padding: '8px' }} disabled={agents.length === 0}>
+            <option value="">Select Agent</option>
+            {agents.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+          </select>
+        </div>
+
+        <div style={{ marginBottom: '15px' }}>
+          <label>Category (A or B)</label>
+          <input type="text" value={category} onChange={(e) => setCategory(e.target.value)} placeholder="A or B" style={{ width: '100%', padding: '8px' }} />
+        </div>
+
+        <div style={{ marginBottom: '15px' }}>
+          <label>Notes (Inactivity reason, etc.)</label>
+          <textarea rows="3" value={notes} onChange={(e) => setNotes(e.target.value)} style={{ width: '100%', padding: '8px' }} />
+        </div>
+
+        <div style={{ marginBottom: '15px' }}>
+          <label>Deposit Made?</label>
+          <input type="checkbox" checked={depositMade} onChange={(e) => setDepositMade(e.target.checked)} /> Yes
+        </div>
+
+        <button type="submit" disabled={loading} style={{ padding: '10px 20px', background: 'blue', color: 'white', border: 'none', borderRadius: '5px' }}>
           {loading ? 'Saving...' : 'Save Record'}
         </button>
       </form>
-      
-      {/* Records Table */}
+
       <h2>📊 Client Records</h2>
-      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-        <thead>
-          <tr><th style={{ border: '1px solid #ddd', padding: '8px' }}>Date</th>
-            <th style={{ border: '1px solid #ddd', padding: '8px' }}>Client</th>
-            <th style={{ border: '1px solid #ddd', padding: '8px' }}>Agent</th>
-            <th style={{ border: '1px solid #ddd', padding: '8px' }}>Page</th>
-            <th style={{ border: '1px solid #ddd', padding: '8px' }}>Reason</th>
-            <th style={{ border: '1px solid #ddd', padding: '8px' }}>Deposit</th>
-          </tr>
-        </thead>
-        <tbody>
-          {records.map(record => (
-            <tr key={record.id}>
-              <td style={{ border: '1px solid #ddd', padding: '8px' }}>{record.date} {record.time}</td>
-              <td style={{ border: '1px solid #ddd', padding: '8px' }}>{record.client_name}</td>
-              <td style={{ border: '1px solid #ddd', padding: '8px' }}>{record.agents?.name}</td>
-              <td style={{ border: '1px solid #ddd', padding: '8px' }}>{record.page_name}</td>
-              <td style={{ border: '1px solid #ddd', padding: '8px' }}>{record.inactivity_reason}</td>
-              <td style={{ border: '1px solid #ddd', padding: '8px' }}>{record.deposit_made ? '✅ Yes' : '❌ No'}</td>
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr style={{ background: '#f1f5f9' }}>
+              <th style={{ padding: '10px', border: '1px solid #ddd' }}>Date/Time</th>
+              <th style={{ padding: '10px', border: '1px solid #ddd' }}>Client</th>
+              <th style={{ padding: '10px', border: '1px solid #ddd' }}>Platform</th>
+              <th style={{ padding: '10px', border: '1px solid #ddd' }}>Agent</th>
+              <th style={{ padding: '10px', border: '1px solid #ddd' }}>Category</th>
+              <th style={{ padding: '10px', border: '1px solid #ddd' }}>Notes</th>
+              <th style={{ padding: '10px', border: '1px solid #ddd' }}>Deposit</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {records.map(record => (
+              <tr key={record.id}>
+                <td style={{ padding: '8px', border: '1px solid #ddd' }}>{record.date} {record.time}</td>
+                <td style={{ padding: '8px', border: '1px solid #ddd' }}>{record.client_name}</td>
+                <td style={{ padding: '8px', border: '1px solid #ddd' }}>{record.page_name}</td>
+                <td style={{ padding: '8px', border: '1px solid #ddd' }}>{record.agents?.name}</td>
+                <td style={{ padding: '8px', border: '1px solid #ddd' }}>{record.category}</td>
+                <td style={{ padding: '8px', border: '1px solid #ddd' }}>{record.notes}</td>
+                <td style={{ padding: '8px', border: '1px solid #ddd' }}>
+                  <input type="checkbox" checked={record.deposit_made} onChange={() => updateDeposit(record.id, record.deposit_made)} />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }
