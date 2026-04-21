@@ -12,8 +12,7 @@ export default function Home() {
   const [clientName, setClientName] = useState('')
   const [platforms, setPlatforms] = useState([])
   const [selectedPlatform, setSelectedPlatform] = useState('')
-  const [agents, setAgents] = useState([])
-  const [selectedAgent, setSelectedAgent] = useState('')
+  const [agentName, setAgentName] = useState('')
   const [category, setCategory] = useState('')
   const [notes, setNotes] = useState('')
   const [depositMade, setDepositMade] = useState(false)
@@ -34,33 +33,10 @@ export default function Home() {
     if (data) setPlatforms(data)
   }
 
-  async function loadAgents(platformName) {
-    if (!platformName) {
-      setAgents([])
-      return
-    }
-    const { data: platformData } = await supabase
-      .from('platforms')
-      .select('id')
-      .eq('name', platformName)
-      .single()
-    
-    if (platformData) {
-      const { data } = await supabase
-        .from('agents')
-        .select('*')
-        .eq('platform_id', platformData.id)
-        .order('name')
-      if (data) setAgents(data)
-    } else {
-      setAgents([])
-    }
-  }
-
   async function loadRecords() {
     const { data } = await supabase
       .from('client_records')
-      .select('*, agents(name)')
+      .select('*')
       .order('created_at', { ascending: false })
     if (data) setRecords(data)
   }
@@ -73,11 +49,11 @@ export default function Home() {
     const finalTime = dateType === 'live' ? liveTime : customTime
 
     const { error } = await supabase.from('client_records').insert({
-      agent_id: parseInt(selectedAgent),
       date: finalDate,
       time: finalTime,
       client_name: clientName,
       page_name: selectedPlatform,
+      agent_name: agentName,
       category: category,
       notes: notes,
       deposit_made: depositMade
@@ -88,7 +64,7 @@ export default function Home() {
       loadRecords()
       setClientName('')
       setSelectedPlatform('')
-      setSelectedAgent('')
+      setAgentName('')
       setCategory('')
       setNotes('')
       setDepositMade(false)
@@ -214,26 +190,19 @@ export default function Home() {
             {/* Platform */}
             <div>
               <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500', color: '#334155' }}>🎮 Platform (Page) *</label>
-              <select required value={selectedPlatform} onChange={(e) => {
-                setSelectedPlatform(e.target.value)
-                loadAgents(e.target.value)
-                setSelectedAgent('')
-              }} style={{ width: '100%', padding: '10px', borderRadius: '10px', border: '1px solid #cbd5e1', background: 'white' }}>
+              <select required value={selectedPlatform} onChange={(e) => setSelectedPlatform(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '10px', border: '1px solid #cbd5e1', background: 'white' }}>
                 <option value="">Select Platform</option>
                 {platforms.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
               </select>
             </div>
 
-            {/* Agent */}
+            {/* Agent Name - Manual Input */}
             <div>
-              <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500', color: '#334155' }}>👨‍💼 Agent *</label>
-              <select required value={selectedAgent} onChange={(e) => setSelectedAgent(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '10px', border: '1px solid #cbd5e1', background: 'white' }} disabled={agents.length === 0}>
-                <option value="">{agents.length === 0 ? 'Select platform first' : 'Select Agent'}</option>
-                {agents.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-              </select>
+              <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500', color: '#334155' }}>👨‍💼 Agent Name *</label>
+              <input type="text" required value={agentName} onChange={(e) => setAgentName(e.target.value)} placeholder="Enter agent name" style={{ width: '100%', padding: '10px', borderRadius: '10px', border: '1px solid #cbd5e1', fontSize: '14px' }} />
             </div>
 
-            {/* Category */}
+            {/* Category - Manual Input */}
             <div>
               <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500', color: '#334155' }}>🏷️ Category (A or B)</label>
               <input type="text" value={category} onChange={(e) => setCategory(e.target.value)} placeholder="A or B" style={{ width: '100%', padding: '10px', borderRadius: '10px', border: '1px solid #cbd5e1' }} />
@@ -242,7 +211,7 @@ export default function Home() {
             {/* Deposit */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '8px' }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                <input type="checkbox" checked={depositMade} onChange={(e) => setDepositMade(e.target.checked)} style={{ width: '18px', height: '18px' }} />
+                <input type="checkbox" checked={depositMade} onChange={(e) => setDepositMade(e.target.checked)} style={{ width: '18px', height: '18px', cursor: 'pointer' }} />
                 <span style={{ fontWeight: '500', color: '#334155' }}>💰 Deposit Made?</span>
               </label>
             </div>
@@ -292,7 +261,7 @@ export default function Home() {
                   <th style={{ padding: '14px 12px', textAlign: 'left', fontWeight: '600', color: '#475569' }}>Category</th>
                   <th style={{ padding: '14px 12px', textAlign: 'left', fontWeight: '600', color: '#475569' }}>Notes</th>
                   <th style={{ padding: '14px 12px', textAlign: 'center', fontWeight: '600', color: '#475569' }}>Deposit</th>
-                 </tr>
+                </tr>
               </thead>
               <tbody>
                 {records.length === 0 ? (
@@ -305,7 +274,7 @@ export default function Home() {
                       <td style={{ padding: '12px', color: '#334155' }}>{record.date} {record.time}</td>
                       <td style={{ padding: '12px', fontWeight: '500', color: '#1e293b' }}>{record.client_name}</td>
                       <td style={{ padding: '12px', color: '#334155' }}>{record.page_name}</td>
-                      <td style={{ padding: '12px', color: '#334155' }}>{record.agents?.name}</td>
+                      <td style={{ padding: '12px', color: '#334155' }}>{record.agent_name}</td>
                       <td style={{ padding: '12px', color: '#334155' }}>{record.category}</td>
                       <td style={{ padding: '12px', color: '#334155', maxWidth: '250px', wordBreak: 'break-word' }}>{record.notes}</td>
                       <td style={{ padding: '12px', textAlign: 'center' }}>
